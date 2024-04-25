@@ -3,6 +3,15 @@ name = "yexp"
 version = "0.1.0"
 edition = "2021"
 
+license = "GPL-3.0"
+authors = ["fixcix"]
+keywords = ["cli", "yaml", "tools"]
+categories = ["config", "command-line-utilities", "development-tools"]
+description = "`yexp` is a small tool for expand yaml files"
+readme = "README.md"
+repository = "https://github.com/fixcik/yexp"
+
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
