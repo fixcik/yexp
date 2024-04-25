@@ -3,12 +3,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use indexmap::IndexSet;
 use serde::de::DeserializeOwned;
 use serde_yaml::{value::TaggedValue, Mapping, Value};
 
 pub fn handle_mapping_yaml<P: AsRef<Path>>(path: P) -> anyhow::Result<Mapping> {
+    let path = path.as_ref();
     match handle_yaml(path)? {
         Value::Mapping(map) => Ok(map),
         _ => bail!("Expected a mapping"),
@@ -16,9 +17,8 @@ pub fn handle_mapping_yaml<P: AsRef<Path>>(path: P) -> anyhow::Result<Mapping> {
 }
 
 pub fn handle_yaml<P: AsRef<Path>>(path: P) -> anyhow::Result<Value> {
-    let v = load_internal(&path)?;
-
     let path = path.as_ref().canonicalize()?;
+    let v = load_internal(&path)?;
 
     handle_import(
         match v {
@@ -94,18 +94,26 @@ fn handle_import(value: Value, path: &Path) -> anyhow::Result<Value> {
             }
             Ok(Value::Sequence(result))
         }
-        Value::Tagged(value) => load_import(value, path),
+        Value::Tagged(value) => load_import(value, path)
+            .context(format!("Failed to load import at '{}'", path.display())),
         _ => Ok(value),
     }
 }
 
 fn load_import(value: Box<TaggedValue>, path: &Path) -> anyhow::Result<Value> {
-    let dir = path.parent().unwrap();
+    let dir = path
+        .parent()
+        .ok_or(anyhow!("Failed to get parent directory"))?;
+
     if value.tag == "!import" {
         match &value.value {
-            Value::String(path) => {
-                let path = from_relative_path(path, dir)?;
-                return handle_yaml(path);
+            Value::String(import_path) => {
+                let import_path = from_relative_path(import_path, dir)?;
+                return handle_yaml(&import_path).context(format!(
+                    "Failed load import '{}' in {}",
+                    import_path.display(),
+                    path.display()
+                ));
             }
             _ => bail!("!import should be a string"),
         }
@@ -120,7 +128,9 @@ fn from_relative_path<P: AsRef<Path>>(path: P, dir: &Path) -> anyhow::Result<Pat
     Ok(if path.is_absolute() {
         path.to_path_buf()
     } else {
-        dir.join(path).canonicalize()?
+        dir.join(path)
+            .canonicalize()
+            .context(format!("File '{}' not found", path.display()))?
     })
 }
 
@@ -144,12 +154,11 @@ fn merge_mapping(value_map: &Mapping, default_map: &Mapping) -> Mapping {
     return result;
 }
 
-fn load_internal<T, P>(path: P) -> anyhow::Result<T>
+fn load_internal<T>(path: &Path) -> anyhow::Result<T>
 where
     T: DeserializeOwned,
-    P: AsRef<Path>,
 {
-    let path_string = path.as_ref().display();
+    let path_string = path.display();
     let reader = File::open(&path).context(format!("Failed to open file {}", path_string))?;
     Ok(serde_yaml::from_reader(reader)
         .context(format!("Failed to parse yaml in file {}", path_string))?)
