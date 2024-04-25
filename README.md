@@ -24,7 +24,8 @@ items: !import path/to/a.yaml
 
 ```yaml
 foo: bar
-extend: path/to/b.yaml
+extend: # <- can be string or sequence of strings
+  - path/to/b.yaml 
 ```
 
 `yexp /path/to/c.yaml` outputs:
