@@ -20,8 +20,7 @@ fn main() -> anyhow::Result<()> {
     let cli = YexpCli::parse();
     let value = handle_yaml(cli.path)?;
 
-    if cli.output.is_some() {
-        let path = cli.output.unwrap();
+    if let Some(path) = cli.output {
         let mut file = std::fs::File::create(path).context("Failed to create file")?;
         serde_yaml::to_writer(&mut file, &value)?;
     } else {

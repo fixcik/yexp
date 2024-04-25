@@ -36,10 +36,14 @@ fn handle_extends<P: AsRef<Path>>(mut map: Mapping, path: P) -> anyhow::Result<M
     if let Some(extend) = extend {
         match extend {
             Value::Sequence(s) => {
+                let mut ext_map = Mapping::new();
                 for extend_path in s {
                     let extend_path: PathBuf = serde_yaml::from_value(extend_path)?;
-                    map = extend_by(map, dir, extend_path)?;
+                    let extend_path = from_relative_path(extend_path, dir)?;
+                    let extended_values = handle_mapping_yaml(extend_path)?;
+                    ext_map = merge_mapping(&extended_values, &ext_map);
                 }
+                map = merge_mapping(&map, &ext_map);
             }
             Value::String(extend_path) => {
                 map = extend_by(map, dir, extend_path)?;
@@ -59,14 +63,8 @@ fn handle_extends<P: AsRef<Path>>(mut map: Mapping, path: P) -> anyhow::Result<M
 }
 
 fn extend_by<P: AsRef<Path>>(values: Mapping, root_dir: &Path, path: P) -> anyhow::Result<Mapping> {
-    let path = path.as_ref();
-    let path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        root_dir.join(path)
-    };
+    let path = from_relative_path(path, root_dir)?;
     let extended_values = handle_mapping_yaml(path)?;
-
     Ok(merge_mapping(&values, &extended_values))
 }
 
@@ -106,12 +104,7 @@ fn load_import(value: Box<TaggedValue>, path: &Path) -> anyhow::Result<Value> {
     if value.tag == "!import" {
         match &value.value {
             Value::String(path) => {
-                let path = PathBuf::from(path);
-                let path = if path.is_absolute() {
-                    path.to_path_buf()
-                } else {
-                    dir.join(path)
-                };
+                let path = from_relative_path(path, dir)?;
                 return handle_yaml(path);
             }
             _ => bail!("!import should be a string"),
@@ -121,18 +114,28 @@ fn load_import(value: Box<TaggedValue>, path: &Path) -> anyhow::Result<Value> {
     Ok(serde_yaml::to_value(value)?)
 }
 
-fn merge_mapping(value_map: &Mapping, patch_map: &Mapping) -> Mapping {
+fn from_relative_path<P: AsRef<Path>>(path: P, dir: &Path) -> anyhow::Result<PathBuf> {
+    let path = path.as_ref();
+
+    Ok(if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        dir.join(path).canonicalize()?
+    })
+}
+
+fn merge_mapping(value_map: &Mapping, default_map: &Mapping) -> Mapping {
     let mut result: Mapping = Mapping::new();
     let mut keys = value_map.keys().map(|k| k.clone()).collect::<IndexSet<_>>();
 
-    keys.extend(patch_map.keys().map(|k| k.clone()));
+    keys.extend(default_map.keys().map(|k| k.clone()));
 
     for key in keys {
         if let Some("extend") = key.as_str() {
             continue;
         }
         let new_value = merge_value(
-            patch_map.get(&key).unwrap_or(&Value::Null),
+            default_map.get(&key).unwrap_or(&Value::Null),
             value_map.get(&key).unwrap_or(&Value::Null),
         );
         result.insert(key, new_value);
@@ -141,7 +144,7 @@ fn merge_mapping(value_map: &Mapping, patch_map: &Mapping) -> Mapping {
     return result;
 }
 
-fn load_internal<'de, T, P>(path: P) -> anyhow::Result<T>
+fn load_internal<T, P>(path: P) -> anyhow::Result<T>
 where
     T: DeserializeOwned,
     P: AsRef<Path>,
