@@ -1,6 +1,9 @@
-# yexp
-
 `yexp` is a small tool for expand yaml files
+
+
+- [Examples](#examples)
+- [Installation](#installation)
+  - [Via cargo](#via-cargo)
 
 ## Examples
 
@@ -32,4 +35,12 @@ items:
 - one
 - two
 - three
+```
+
+## Installation
+
+### Via cargo
+
+```bash
+cargo install yexp
 ```
