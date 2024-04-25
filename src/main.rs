@@ -7,11 +7,13 @@ use yexp::handle_yaml;
 #[derive(Parser, Debug)]
 #[command(name = "yexp")]
 #[command(bin_name = "yexp")]
+#[command(arg_required_else_help(true))]
 #[command(version, about)]
 struct YexpCli {
     #[arg(name = "path")]
     path: PathBuf,
 
+    /// Path to output file (optional)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
 }
