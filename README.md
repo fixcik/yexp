@@ -17,7 +17,7 @@
 
 `b.yaml`
 ```yaml
-items: !import path/to/a.yaml
+items: !include path/to/a.yaml
 ```
 
 `c.yaml`

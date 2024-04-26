@@ -20,7 +20,7 @@ pub fn handle_yaml<P: AsRef<Path>>(path: P) -> anyhow::Result<Value> {
     let path = path.as_ref().canonicalize()?;
     let v = load_internal(&path)?;
 
-    handle_import(
+    handle_include(
         match v {
             Value::Mapping(map) => Value::Mapping(handle_extends(map, &path)?),
             _ => v,
@@ -78,34 +78,34 @@ fn merge_value(default: &Value, value: &Value) -> Value {
     }
 }
 
-fn handle_import(value: Value, path: &Path) -> anyhow::Result<Value> {
+fn handle_include(value: Value, path: &Path) -> anyhow::Result<Value> {
     match value {
         Value::Mapping(map) => {
             let mut result = Mapping::new();
             for (key, value) in map {
-                result.insert(key, handle_import(value, path)?);
+                result.insert(key, handle_include(value, path)?);
             }
             Ok(Value::Mapping(result))
         }
         Value::Sequence(seq) => {
             let mut result = Vec::new();
             for value in seq {
-                result.push(handle_import(value, &path)?);
+                result.push(handle_include(value, &path)?);
             }
             Ok(Value::Sequence(result))
         }
-        Value::Tagged(value) => load_import(value, path)
+        Value::Tagged(value) => load_include(value, path)
             .context(format!("Failed to load import at '{}'", path.display())),
         _ => Ok(value),
     }
 }
 
-fn load_import(value: Box<TaggedValue>, path: &Path) -> anyhow::Result<Value> {
+fn load_include(value: Box<TaggedValue>, path: &Path) -> anyhow::Result<Value> {
     let dir = path
         .parent()
         .ok_or(anyhow!("Failed to get parent directory"))?;
 
-    if value.tag == "!import" {
+    if value.tag == "!include" {
         match &value.value {
             Value::String(import_path) => {
                 let import_path = from_relative_path(import_path, dir)?;
