@@ -17,12 +17,18 @@ pub fn handle_mapping_yaml<P: AsRef<Path>>(path: P) -> anyhow::Result<Mapping> {
 }
 
 pub fn handle_yaml<P: AsRef<Path>>(path: P) -> anyhow::Result<Value> {
-    let path = path.as_ref().canonicalize()?;
+    let path = path.as_ref();
+    let path = path
+        .canonicalize()
+        .context(format!("File '{}' not found", path.display()))?;
+
     let v = load_internal(&path)?;
 
     handle_include(
         match v {
-            Value::Mapping(map) => Value::Mapping(handle_extends(map, &path)?),
+            Value::Mapping(map) => Value::Mapping(
+                handle_extends(map, &path).context(format!("Failed extend {}", path.display()))?,
+            ),
             _ => v,
         },
         path.as_ref(),
@@ -32,7 +38,11 @@ pub fn handle_yaml<P: AsRef<Path>>(path: P) -> anyhow::Result<Value> {
 fn handle_extends<P: AsRef<Path>>(mut map: Mapping, path: P) -> anyhow::Result<Mapping> {
     let extend_key = Value::String(String::from("extend"));
     let extend = map.get(&extend_key).cloned();
-    let dir = path.as_ref().parent().unwrap();
+    let path = path.as_ref();
+    let dir = path.parent().ok_or(anyhow!(format!(
+        "Failed to get directory of path: {}",
+        path.display()
+    )))?;
     if let Some(extend) = extend {
         match extend {
             Value::Sequence(s) => {
@@ -51,7 +61,7 @@ fn handle_extends<P: AsRef<Path>>(mut map: Mapping, path: P) -> anyhow::Result<M
             _ => {
                 bail!(
                     "extend must be a sequence or a string, in {}",
-                    path.as_ref().display()
+                    path.display()
                 );
             }
         }
@@ -101,9 +111,10 @@ fn handle_include(value: Value, path: &Path) -> anyhow::Result<Value> {
 }
 
 fn load_include(value: Box<TaggedValue>, path: &Path) -> anyhow::Result<Value> {
-    let dir = path
-        .parent()
-        .ok_or(anyhow!("Failed to get parent directory"))?;
+    let dir = path.parent().ok_or(anyhow!(format!(
+        "Failed to get directory of path: {}",
+        path.display()
+    )))?;
 
     if value.tag == "!include" {
         match &value.value {
