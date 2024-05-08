@@ -50,8 +50,14 @@ fn handle_extends<P: AsRef<Path>>(mut map: Mapping, path: P) -> anyhow::Result<M
                 for extend_path in s {
                     let extend_path: PathBuf = serde_yaml::from_value(extend_path)?;
                     let extend_path = from_relative_path(extend_path, dir)?;
-                    let extended_values = handle_mapping_yaml(extend_path)?;
-                    ext_map = merge_mapping(&extended_values, &ext_map);
+                    let extended_values = handle_yaml(&extend_path)?;
+                    match extended_values {
+                        Value::Mapping(extended_values) => {
+                            ext_map = merge_mapping(&extended_values, &ext_map);
+                        }
+                        Value::Null => {}
+                        _ => bail!("Expected a mapping in {}", extend_path.display()),
+                    }
                 }
                 map = merge_mapping(&map, &ext_map);
             }
@@ -74,8 +80,12 @@ fn handle_extends<P: AsRef<Path>>(mut map: Mapping, path: P) -> anyhow::Result<M
 
 fn extend_by<P: AsRef<Path>>(values: Mapping, root_dir: &Path, path: P) -> anyhow::Result<Mapping> {
     let path = from_relative_path(path, root_dir)?;
-    let extended_values = handle_mapping_yaml(path)?;
-    Ok(merge_mapping(&values, &extended_values))
+    let extended_values = handle_yaml(&path)?;
+    match extended_values {
+        Value::Mapping(extended_values) => Ok(merge_mapping(&values, &extended_values)),
+        Value::Null => Ok(values),
+        _ => bail!("Expected a mapping in {}", path.display()),
+    }
 }
 
 fn merge_value(default: &Value, value: &Value) -> Value {
